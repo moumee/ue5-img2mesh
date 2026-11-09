@@ -1,0 +1,3 @@
+[submodule "Plugins/ReconstructionBridge/ThirdParty/ExMesh"]
+	path = Plugins/ReconstructionBridge/ThirdParty/ExMesh
+	url = https://github.com/moumee/ExMesh.git

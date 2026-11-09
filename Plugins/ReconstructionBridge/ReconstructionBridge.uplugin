@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "ReconstructionBridge",
-	"Description": "",
+	"Description": "Image-to-mesh reconstruction bridge for ExMesh (bundled in ThirdParty/ExMesh)",
 	"Category": "Other",
 	"CreatedBy": "",
 	"CreatedByURL": "",
@@ -13,5 +13,15 @@
 	"CanContainContent": true,
 	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
-	"Installed": false
+	"Installed": false,
+	"Plugins": [
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		}
+	]
 }

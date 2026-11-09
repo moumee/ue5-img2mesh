@@ -30,113 +30,78 @@ import unreal
 
 
 
-EXTERNAL_PYTHON = (
-
-
-
-    r"C:\Users\pxvne\miniconda3\envs\exmesh\python.exe"
-
-
-
-)
-
-
-
-
-
-
-
-EXMESH_ROOT = Path(
-
-
-
-    r"C:\Users\pxvne\ExMesh"
-
-
-
-)
-
-
-
-
-
-
-
-DATASET_PATH = (
-
-
-
-    EXMESH_ROOT
-
-
-
-    / "workdir"
-
-
-
-    / "DTU"
-
-
-
-    / "scan24"
-
-
-
-)
-
-
-
-
-
-
-
-RUN_STATE_PATH = (
-
-
-
-    EXMESH_ROOT
-
-
-
-    / "outputs"
-
-
-
-    / "reconstruction_bridge_run_state.json"
-
-
-
-)
-
-
-
-
-
-
-
-UI_STATE_PATH = (
-
-
-
-    EXMESH_ROOT
-
-
-
-    / "outputs"
-
-
-
-    / "reconstruction_bridge_ui_state.json"
-
-
-
-)
-
-
-
-
-
-
+import os
+
+# -----------------------------------------------------------------------------
+# Path configuration
+#
+# ExMesh is bundled with the plugin as a git submodule:
+#   Plugins/ReconstructionBridge/ThirdParty/ExMesh
+# Every path below can be overridden per PC with an environment variable:
+#   EXMESH_ROOT         ExMesh source folder        (default: bundled submodule)
+#   EXMESH_PYTHON       python.exe of the conda env (default: auto-detect "exmesh")
+#   EXMESH_WORKDIR      dataset folder              (default: <EXMESH_ROOT>/workdir)
+#   EXMESH_OUTPUT_ROOT  training/export results     (default: <Project>/Saved/ReconstructionBridge/outputs)
+# -----------------------------------------------------------------------------
+
+PLUGIN_ROOT = Path(__file__).resolve().parents[2]
+
+BUNDLED_EXMESH_ROOT = PLUGIN_ROOT / "ThirdParty" / "ExMesh"
+
+
+def _env_path(name):
+    value = os.environ.get(name, "").strip().strip('"')
+    return Path(value) if value else None
+
+
+def _find_external_python():
+    env_python = _env_path("EXMESH_PYTHON")
+    if env_python is not None:
+        return str(env_python)
+    home = Path.home()
+    candidates = []
+    conda_prefix_root = _env_path("CONDA_EXE")
+    if conda_prefix_root is not None:
+        # .../miniconda3/Scripts/conda.exe -> .../miniconda3
+        candidates.append(conda_prefix_root.parent.parent)
+    for base in ("miniconda3", "anaconda3", "miniforge3", "mambaforge"):
+        candidates.append(home / base)
+        candidates.append(Path("C:/ProgramData") / base)
+    candidates.append(home / "AppData" / "Local" / "miniconda3")
+    candidates.append(home / ".conda")
+    for base in candidates:
+        python_exe = base / "envs" / "exmesh" / "python.exe"
+        if python_exe.is_file():
+            return str(python_exe)
+    # Not found: return the conventional location so the error message
+    # tells the user where it was expected.
+    return str(home / "miniconda3" / "envs" / "exmesh" / "python.exe")
+
+
+def _default_output_root():
+    try:
+        saved_dir = unreal.Paths.convert_relative_path_to_full(
+            unreal.Paths.project_saved_dir()
+        )
+        return Path(saved_dir) / "ReconstructionBridge" / "outputs"
+    except Exception:
+        # Plugins/ReconstructionBridge -> <Project>
+        return PLUGIN_ROOT.parents[1] / "Saved" / "ReconstructionBridge" / "outputs"
+
+
+EXTERNAL_PYTHON = _find_external_python()
+
+EXMESH_ROOT = _env_path("EXMESH_ROOT") or BUNDLED_EXMESH_ROOT
+
+EXMESH_WORKDIR = _env_path("EXMESH_WORKDIR") or (EXMESH_ROOT / "workdir")
+
+OUTPUT_ROOT = _env_path("EXMESH_OUTPUT_ROOT") or _default_output_root()
+
+DATASET_PATH = EXMESH_WORKDIR / "DTU" / "scan24"
+
+RUN_STATE_PATH = OUTPUT_ROOT / "reconstruction_bridge_run_state.json"
+
+UI_STATE_PATH = OUTPUT_ROOT / "reconstruction_bridge_ui_state.json"
 
 TRAIN_SCRIPT = EXMESH_ROOT / "train.py"
 
@@ -2199,11 +2164,7 @@ def start_exmesh_run(
 
 
 
-        EXMESH_ROOT
-
-
-
-        / "outputs"
+        OUTPUT_ROOT
 
 
 
@@ -2627,11 +2588,7 @@ def import_latest_exmesh_mesh():
 
 
 
-        EXMESH_ROOT
-
-
-
-        / "outputs"
+        OUTPUT_ROOT
 
 
 
@@ -3571,7 +3528,7 @@ def check_latest_exmesh_status():
 
 
 
-    output_root = EXMESH_ROOT / "outputs"
+    output_root = OUTPUT_ROOT
 
 
 
@@ -4915,7 +4872,7 @@ def import_latest_wildmesh_result():
 
 
 
-        EXMESH_ROOT / "outputs"
+        OUTPUT_ROOT
 
 
 
@@ -5659,7 +5616,7 @@ def start_wildmesh_simplification(ratio=0.1):
 
 
 
-    exmesh_repo = Path(r"D:\GH\ExMesh")
+    exmesh_repo = EXMESH_ROOT
 
 
 
@@ -5997,11 +5954,7 @@ def start_wildmesh_simplification(ratio=0.1):
 
 
 
-            EXMESH_ROOT
-
-
-
-            / "outputs"
+            OUTPUT_ROOT
 
 
 
@@ -6209,11 +6162,7 @@ def _wildmesh_state_path():
 
 
 
-        EXMESH_ROOT
-
-
-
-        / "outputs"
+        OUTPUT_ROOT
 
 
 
@@ -6961,7 +6910,7 @@ def export_latest_exmesh_for_wildmesh():
 
 
 
-    exmesh_repo = Path(r"D:\GH\ExMesh")
+    exmesh_repo = EXMESH_ROOT
 
 
 
@@ -7025,7 +6974,7 @@ def export_latest_exmesh_for_wildmesh():
 
 
 
-        EXMESH_ROOT / "outputs"
+        OUTPUT_ROOT
 
 
 
@@ -7665,12 +7614,8 @@ def export_latest_exmesh_for_wildmesh():
 
 def import_modified_wildmesh_comparison():
 
-    result_root = Path(
-
-        r"C:\Users\pxvne\ExMesh\outputs"
-
-        r"\modified_importance_100iter\export"
-
+    result_root = (
+        OUTPUT_ROOT / "modified_importance_100iter" / "export"
     )
 
 
@@ -7923,12 +7868,8 @@ def import_modified_wildmesh_comparison():
 
 def create_modified_wildmesh_auto_lod():
 
-    export_folder = Path(
-
-        r"C:\Users\pxvne\ExMesh\outputs"
-
-        r"\modified_importance_100iter\export"
-
+    export_folder = (
+        OUTPUT_ROOT / "modified_importance_100iter" / "export"
     )
 
 
@@ -8190,11 +8131,11 @@ def create_modified_wildmesh_auto_lod():
 # End-to-end modified WildMesh Auto LOD pipeline
 # -----------------------------------------------------------------------------
 
-MODIFIED_EXMESH_REPO = Path(r"D:\GH\ExMesh")
+MODIFIED_EXMESH_REPO = EXMESH_ROOT
 MODIFIED_TRAIN_SCRIPT = MODIFIED_EXMESH_REPO / "train.py"
 MODIFIED_EXPORT_SCRIPT = MODIFIED_EXMESH_REPO / "scripts" / "export_obj.py"
 MODIFIED_WILDMESH_MODULE = "simplification.wild_simplify_xatlas_modified"
-AUTO_LOD_STATE_PATH = EXMESH_ROOT / "outputs" / "auto_lod_pipeline_state.json"
+AUTO_LOD_STATE_PATH = OUTPUT_ROOT / "auto_lod_pipeline_state.json"
 
 if "_auto_lod_pipeline" not in globals():
     _auto_lod_pipeline = None
@@ -8612,8 +8553,7 @@ def start_auto_lod_pipeline(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     run_tag = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = (
-        EXMESH_ROOT
-        / "outputs"
+        OUTPUT_ROOT
         / f"auto_lod_run_{timestamp}_{iterations}iter"
     )
     output_dir.mkdir(parents=True, exist_ok=False)
@@ -8698,7 +8638,7 @@ def get_auto_lod_pipeline_status():
 
 
 def resume_auto_lod_import(
-    output_dir=r"C:\Users\pxvne\ExMesh\outputs\auto_lod_run_20261005_155023_648727_100iter",
+    output_dir=str(OUTPUT_ROOT / "auto_lod_run_20261005_155023_648727_100iter"),
     lod1_screen_size=0.35,
 ):
     """Create the Unreal LOD asset from a completed ExMesh/WildMesh run.
