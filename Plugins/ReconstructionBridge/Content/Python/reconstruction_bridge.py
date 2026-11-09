@@ -4712,6 +4712,21 @@ def _create_scaled_obj_for_unreal(
 
 
 
+def _disable_nanite(static_mesh):
+    """Imported meshes get Nanite by default; Nanite ignores authored LODs
+    and shows a coarse fallback mesh as "LOD0", so turn it off for LOD assets."""
+    settings = static_mesh.get_editor_property("nanite_settings")
+    if not settings.enabled:
+        return
+    settings.enabled = False
+    subsystem = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+    if subsystem is not None and hasattr(subsystem, "set_nanite_settings"):
+        subsystem.set_nanite_settings(static_mesh, settings, apply_changes=True)
+    else:
+        static_mesh.set_editor_property("nanite_settings", settings)
+    unreal.EditorAssetLibrary.save_loaded_asset(static_mesh, only_if_is_dirty=False)
+
+
 def _import_external_asset(
 
 
@@ -4856,27 +4871,16 @@ def _import_external_asset(
 
 
 
-    return [
-
-
-
+    assets = [
         unreal.EditorAssetLibrary.load_asset(path)
-
-
-
         for path in task.get_editor_property(
-
-
-
             "imported_object_paths"
-
-
-
         )
-
-
-
     ]
+    for asset in assets:
+        if isinstance(asset, unreal.StaticMesh):
+            _disable_nanite(asset)
+    return assets
 
 
 
