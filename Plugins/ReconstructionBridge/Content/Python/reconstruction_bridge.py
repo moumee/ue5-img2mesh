@@ -439,6 +439,17 @@ def validate_dataset(dataset_path=None):
 
 
 
+    # Video / photo folder input: explain the automatic preprocessing,
+    # or validate the already prepared dataset for it.
+    import reconstruction_prepare
+    _raw_message = reconstruction_prepare.describe_input(dataset_path)
+    if _raw_message is not None:
+        unreal.log(_raw_message)
+        unreal.EditorDialog.show_message(
+            "Dataset", _raw_message, unreal.AppMsgType.OK
+        )
+        return
+    dataset_path = reconstruction_prepare.use_cached(dataset_path)
     selected_dataset = _resolve_dataset_path(
 
 
@@ -1828,6 +1839,16 @@ def start_exmesh_run(
 
 
 
+    # Video / photo folder input: run COLMAP + masks + DA3 first, then retry.
+    import reconstruction_prepare
+    _proceed, dataset_path = reconstruction_prepare.resolve_or_prepare(
+        dataset_path,
+        lambda prepared: start_exmesh_run(
+            iterations, prepared, train_script, repo_root
+        ),
+    )
+    if not _proceed:
+        return
     previous_state = _read_run_state()
 
 
@@ -8500,6 +8521,16 @@ def start_auto_lod_pipeline(
     global _auto_lod_tick_handle
     global _auto_lod_last_poll_time
 
+    # Video / photo folder input: run COLMAP + masks + DA3 first, then retry.
+    import reconstruction_prepare
+    _proceed, dataset_path = reconstruction_prepare.resolve_or_prepare(
+        dataset_path,
+        lambda prepared: start_auto_lod_pipeline(
+            iterations, ratio, importance_lambda, lod1_screen_size, prepared
+        ),
+    )
+    if not _proceed:
+        return
     if (
         _auto_lod_pipeline is not None
         and _auto_lod_pipeline.get("stage") in {"EXMESH", "WILDMESH"}
