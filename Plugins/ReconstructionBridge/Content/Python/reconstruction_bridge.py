@@ -8294,6 +8294,101 @@ def _export_auto_lod_exmesh_result():
 
 
 
+
+def _compute_ue_transform(model_dir, obj_path, height_cm=100.0):
+    """Upright, grounded, real-size placement for an ExMesh result.
+
+    ExMesh meshes live in the COLMAP frame (arbitrary up and scale). Up is
+    the average up vector of the capture cameras, the front (+X) faces the
+    first capture camera, the base sits on z=0 and the height becomes
+    height_cm. Returns {"R": rows, "t": [...], "s": float} for
+    p_ue = (R p + t) * s. Pure Python (no numpy in Unreal).
+    """
+    import math
+
+    def sub(a, b):
+        return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+
+    def dot(a, b):
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+    def cross(a, b):
+        return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+    def unit(a):
+        n = math.sqrt(dot(a, a))
+        if n < 1e-12:
+            raise ValueError("degenerate vector")
+        return [a[0] / n, a[1] / n, a[2] / n]
+
+    cameras = json.loads((Path(model_dir) / "cameras.json").read_text(encoding="utf-8"))
+    if not cameras:
+        raise ValueError("cameras.json is empty")
+    # 3DGS camera json: "rotation" is camera-to-world; column 1 is the image-down axis.
+    up = [0.0, 0.0, 0.0]
+    for cam in cameras:
+        rot = cam["rotation"]
+        for i in range(3):
+            up[i] -= rot[i][1]
+    up = unit(up)
+
+    vertices = []
+    for line in Path(obj_path).read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("v "):
+            parts = line.split()
+            vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
+    if not vertices:
+        raise ValueError(f"no vertices in {obj_path}")
+    count = float(len(vertices))
+    center = [sum(v[i] for v in vertices) / count for i in range(3)]
+
+    first = min(cameras, key=lambda c: str(c.get("img_name", c.get("id"))))
+    front = sub(first["position"], center)
+    front = sub(front, [up[i] * dot(front, up) for i in range(3)])
+    try:
+        front = unit(front)
+    except ValueError:
+        helper = [1.0, 0.0, 0.0] if abs(up[0]) < 0.9 else [0.0, 1.0, 0.0]
+        front = unit(cross(helper, up))
+    side = cross(up, front)
+    rows = [front, side, up]
+
+    lo = [float("inf")] * 3
+    hi = [float("-inf")] * 3
+    for v in vertices:
+        for i in range(3):
+            value = dot(rows[i], v)
+            lo[i] = min(lo[i], value)
+            hi[i] = max(hi[i], value)
+    height = hi[2] - lo[2]
+    if height <= 0:
+        raise ValueError("mesh has no height")
+    translate = [-(lo[0] + hi[0]) / 2.0, -(lo[1] + hi[1]) / 2.0, -lo[2]]
+    return {"R": rows, "t": translate, "s": float(height_cm) / height}
+
+
+def _create_transformed_obj_for_unreal(source_obj, transform):
+    """Copy an OBJ to *_ue.obj with p' = (R p + t) * s (normals rotated)."""
+    source_obj = Path(source_obj)
+    rows = transform["R"]
+    translate = transform["t"]
+    scale = float(transform["s"])
+    output_lines = []
+    for line in source_obj.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("v ") or line.startswith("vn "):
+            values = line.split()
+            if len(values) >= 4:
+                p = [float(values[1]), float(values[2]), float(values[3])]
+                q = [rows[i][0] * p[0] + rows[i][1] * p[1] + rows[i][2] * p[2] for i in range(3)]
+                if values[0] == "v":
+                    q = [(q[i] + translate[i]) * scale for i in range(3)]
+                line = " ".join([values[0]] + [repr(x) for x in q] + values[4:])
+        output_lines.append(line)
+    out = source_obj.with_name(source_obj.stem + "_ue.obj")
+    out.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
+    return out
+
+
 def _ensure_lod_v2_configured():
     """Create Saved/ExMeshLOD/settings.json from the bridge paths if missing."""
     import reconstruction_lod_v2 as v2
@@ -8324,6 +8419,13 @@ def _start_auto_lod_ppq():
     if _auto_lod_tick_handle is not None:
         unreal.unregister_slate_post_tick_callback(_auto_lod_tick_handle)
         _auto_lod_tick_handle = None
+    ue_transform = _compute_ue_transform(
+        state["output_dir"], state["original_obj"], state.get("height_cm", 100.0)
+    )
+    unreal.log(
+        "Auto LOD: placing mesh upright on z=0, "
+        f"height {state.get('height_cm', 100.0)} cm (scale {ue_transform['s']:.3f})"
+    )
     work_dir = v2.start_accurate_lod_v2(
         str(state["output_dir"]),
         iteration=int(state["iteration"]),
@@ -8331,6 +8433,7 @@ def _start_auto_lod_ppq():
         screen_sizes=(1.0, screen_size),
         refine_mode="full",
         scale=100.0,
+        ue_transform=ue_transform,
     )
     state["ppq_work_dir"] = work_dir
     _write_auto_lod_state()
@@ -8575,7 +8678,8 @@ def start_auto_lod_pipeline(
     ratio=0.1,
     importance_lambda=4.0,
     lod1_screen_size=0.35,
-    dataset_path=None
+    dataset_path=None,
+    height_cm=100.0
 ):
     global _auto_lod_pipeline
     global _auto_lod_tick_handle
@@ -8586,7 +8690,8 @@ def start_auto_lod_pipeline(
     _proceed, dataset_path = reconstruction_prepare.resolve_or_prepare(
         dataset_path,
         lambda prepared: start_auto_lod_pipeline(
-            iterations, ratio, importance_lambda, lod1_screen_size, prepared
+            iterations, ratio, importance_lambda, lod1_screen_size, prepared,
+            height_cm=height_cm
         ),
     )
     if not _proceed:
@@ -8605,6 +8710,7 @@ def start_auto_lod_pipeline(
         ratio = float(_widget_number(ratio))
         importance_lambda = float(_widget_number(importance_lambda))
         lod1_screen_size = float(_widget_number(lod1_screen_size))
+        height_cm = float(_widget_number(height_cm))
     except (TypeError, ValueError):
         unreal.log_error("Invalid Auto LOD parameter value.")
         return
@@ -8617,6 +8723,9 @@ def start_auto_lod_pipeline(
         return
     if importance_lambda < 0.0:
         unreal.log_error("Importance lambda must be zero or greater.")
+        return
+    if height_cm <= 0.0:
+        unreal.log_error("Height (cm) must be greater than 0.")
         return
     if not 0.0 < lod1_screen_size < 1.0:
         unreal.log_error("LOD1 screen size must be between 0 and 1.")
@@ -8678,6 +8787,7 @@ def start_auto_lod_pipeline(
         "ratio": ratio,
         "importance_lambda": importance_lambda,
         "lod1_screen_size": lod1_screen_size,
+        "height_cm": height_cm,
         "dataset": selected_dataset,
         "output_dir": output_dir,
         "training_log": training_log,

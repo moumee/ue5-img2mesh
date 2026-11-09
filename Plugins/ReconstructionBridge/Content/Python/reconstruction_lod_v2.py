@@ -246,7 +246,8 @@ def _add_step(steps, stage, name, script, args, outputs):
                       outputs=[str(p) for p in outputs]))
 
 
-def _start(mode, source, ratios, screen_sizes, refine_mode, scale, height=None):
+def _start(mode, source, ratios, screen_sizes, refine_mode, scale, height=None,
+           ue_transform=None):
     global _job, _tick_handle
     if _job and _job.get("stage") not in ("COMPLETE", "FAILED", "CANCELLED"):
         raise RuntimeError("An LOD v2 job is already running")
@@ -348,6 +349,7 @@ def _start(mode, source, ratios, screen_sizes, refine_mode, scale, height=None):
                 original_obj=str(original_obj), original_texture=str(original_texture),
                 results=[(str(o), str(t)) for o, t in results],
                 ratios=ratios, screen_sizes=screen_sizes, scale=float(scale),
+                ue_transform=ue_transform,
                 config=config, steps=steps, index=0, lines=deque(maxlen=50))
     _save_state()
     try:
@@ -361,8 +363,13 @@ def _start(mode, source, ratios, screen_sizes, refine_mode, scale, height=None):
 
 def start_accurate_lod_v2(model_dir, iteration=100, ratios=(0.5, 0.25, 0.1),
                           screen_sizes=(1.0, 0.35, 0.15, 0.05),
-                          refine_mode="full", scale=100.0):
-    """Use an existing ExMesh run after train.py and export_obj.py complete."""
+                          refine_mode="full", scale=100.0, ue_transform=None):
+    """Use an existing ExMesh run after train.py and export_obj.py complete.
+
+    ue_transform: optional {"R", "t", "s"} from
+    reconstruction_bridge._compute_ue_transform (up/ground/height alignment);
+    when given it replaces the plain scale for the Unreal copies.
+    """
     model = _absolute(model_dir, "model_dir")
     export = model / "export"
     original = export / f"mesh_iter_{int(iteration)}.obj"
@@ -370,12 +377,13 @@ def start_accurate_lod_v2(model_dir, iteration=100, ratios=(0.5, 0.25, 0.1),
     if not _files(original, texture):
         raise FileNotFoundError(f"Export original OBJ/PNG first: {original}")
     return _start_accurate(model, original, texture, ratios, screen_sizes,
-                           refine_mode, scale)
+                           refine_mode, scale, ue_transform)
 
 
-def _start_accurate(model, obj, texture, ratios, sizes, refine, scale):
+def _start_accurate(model, obj, texture, ratios, sizes, refine, scale, ue_transform=None):
     # A tuple is used only to carry the immutable export pair into _start.
-    return _start("accurate", (obj, texture, model), ratios, sizes, refine, scale)
+    return _start("accurate", (obj, texture, model), ratios, sizes, refine, scale,
+                  ue_transform=ue_transform)
 
 
 def start_quick_lod_v2(photo, height_cm=100, ratios=(0.1,),
@@ -398,7 +406,10 @@ def _import_meshes():
     scale = state["scale"]
 
     def import_pair(obj, tex, name):
-        scaled = bridge._create_scaled_obj_for_unreal(Path(obj), scale=scale)
+        if state.get("ue_transform"):
+            scaled = bridge._create_transformed_obj_for_unreal(Path(obj), state["ue_transform"])
+        else:
+            scaled = bridge._create_scaled_obj_for_unreal(Path(obj), scale=scale)
         # This makes a copy for UE; PPQ/refine always receive the untouched export OBJ.
         tex_asset = next((x for x in bridge._import_external_asset(
             Path(tex), folder, "T_" + name) if isinstance(x, unreal.Texture2D)), None)
