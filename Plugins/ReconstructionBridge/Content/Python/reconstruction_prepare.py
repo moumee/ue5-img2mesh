@@ -26,7 +26,7 @@ import unreal
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 PREPARE_SCRIPT = Path(__file__).resolve().parent / "prepare_dataset_external.py"
 MARKER_NAME = "prepared.json"
-MIN_MARKER_VERSION = 2  # v2 added mesh.ply (visual hull initial mesh)
+MIN_MARKER_VERSION = 3  # v2 added mesh.ply, v3 switched to DA3-BASE
 LOG_NAME = "prepare.log"
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}

@@ -38,7 +38,7 @@ ReconstructionBridge/
    - `rb_prep`: 전처리 환경 (Depth Anything 3 + rembg)
    - `ThirdParty/COLMAP`: COLMAP (약 400MB 다운로드)
 
-   이미 있는 conda 환경은 지우지 않고 그대로 재사용합니다. 모델 가중치(DA3 약 1.4GB, rembg 약 220MB)는 처음 전처리할 때 자동으로 받습니다.
+   이미 있는 conda 환경은 지우지 않고 그대로 재사용합니다. 모델 가중치(DA3-BASE 약 0.5GB, rembg 약 220MB)는 처음 전처리할 때 자동으로 받습니다.
 3. **데이터셋**: 영상/사진 폴더는 아래 자동 전처리를 쓰면 됩니다. 이미 전처리된 데이터셋(DTU 등)은
    `ThirdParty/ExMesh/workdir/` 아래에 두거나(`git`에는 안 올라감), 다른 곳이면 `EXMESH_WORKDIR`로 지정합니다.
 
@@ -53,7 +53,7 @@ ReconstructionBridge/
 | colmap | COLMAP SfM, 왜곡 보정 | `images/`, `sparse/0/` |
 | mask | rembg(`birefnet-general-lite`)로 물체 마스크 → `images/`의 알파 채널에도 기록 | `mask/` |
 | hull | 마스크 실루엣 + 카메라로 visual hull을 깎아 ExMesh 초기 메쉬 생성 | `mesh.ply` |
-| da3 | Depth Anything 3(`DA3-LARGE-1.1`), COLMAP 카메라를 넣어 depth 추정 | `mono_priors/da3/` |
+| da3 | Depth Anything 3(`DA3-BASE`, Apache-2.0), COLMAP 카메라를 넣어 depth 추정 | `mono_priors/da3/` |
 
 - 결과는 `<프로젝트>/Saved/ReconstructionBridge/datasets/<이름>_<해시>/`에 저장되고, 원본이 바뀌지 않으면 다음 실행 때 재사용합니다.
 - **Validate** 버튼은 영상/사진 폴더면 전처리 계획과 빠진 설치 항목을 보여 줍니다.

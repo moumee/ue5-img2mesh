@@ -43,7 +43,7 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm"}
 ALL_STEPS = ("frames", "colmap", "mask", "hull", "da3")
 MARKER_NAME = "prepared.json"
-MARKER_VERSION = 2
+MARKER_VERSION = 3  # v3: DA3-BASE + CUDA masks
 
 
 def log(message):
@@ -77,7 +77,8 @@ def parse_args():
     parser.add_argument("--hull-res", type=int, default=160, help="voxel grid resolution")
     parser.add_argument("--hull-faces", type=int, default=30000, help="target face count")
     # DA3
-    parser.add_argument("--da3-model", default="depth-anything/DA3-LARGE-1.1")
+    parser.add_argument("--da3-model", default="depth-anything/DA3-BASE",
+                        help="DA3-BASE / DA3-SMALL are Apache-2.0; LARGE/GIANT are CC BY-NC")
     parser.add_argument("--da3-chunk", type=int, default=16, help="views per DA3 forward pass")
     parser.add_argument("--da3-res", type=int, default=504, help="DA3 processing resolution")
     return parser.parse_args()
@@ -295,6 +296,10 @@ def step_colmap(args, src, out):
 # -----------------------------------------------------------------------------
 
 def _create_rembg_session(model):
+    try:
+        import torch  # noqa: F401  loads the CUDA/cuDNN DLLs onnxruntime-gpu needs
+    except Exception:
+        pass
     from rembg import new_session
 
     providers = ["CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider"]

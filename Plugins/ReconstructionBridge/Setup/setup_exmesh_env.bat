@@ -127,8 +127,11 @@ set "RUN=call "%CONDA%" run -n %PREP_ENV% --no-capture-output"
 rem DA3 without xformers (optional for DA3, no Windows wheel for torch 2.5.1)
 %RUN% python -m pip install --no-deps "git+https://github.com/ByteDance-Seed/depth-anything-3.git@%DA3_REF%" || exit /b 1
 %RUN% python -m pip install "numpy<2" addict trimesh einops huggingface_hub imageio opencv-python open3d fastapi uvicorn requests typer pillow omegaconf evo e3nn "moviepy==1.0.3" plyfile pillow_heif safetensors pycolmap || exit /b 1
-rem rembg 2.0.69 is the newest release that still allows numpy<2 (needed by DA3)
-%RUN% python -m pip install "rembg==2.0.69" onnxruntime-directml "numpy<2" || exit /b 1
+rem rembg 2.0.69 is the newest release that still allows numpy<2 (needed by DA3).
+rem onnxruntime-gpu 1.20.x = CUDA 12 + cuDNN 9 (DLLs come with torch cu121); about 4x faster
+rem than onnxruntime-directml for the BiRefNet mask model.
+%RUN% python -m pip uninstall -y onnxruntime onnxruntime-directml >nul 2>nul
+%RUN% python -m pip install "rembg==2.0.69" "onnxruntime-gpu==1.20.2" "numpy<2" || exit /b 1
 %RUN% python -W ignore -c "import torch, rembg, onnxruntime; from depth_anything_3.api import DepthAnything3; print('rb_prep: torch', torch.__version__, 'cuda', torch.cuda.is_available(), 'onnx', onnxruntime.get_available_providers())"
 exit /b 0
 
