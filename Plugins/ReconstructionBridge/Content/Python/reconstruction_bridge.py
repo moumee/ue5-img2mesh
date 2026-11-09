@@ -106,6 +106,17 @@ UI_STATE_PATH = OUTPUT_ROOT / "reconstruction_bridge_ui_state.json"
 TRAIN_SCRIPT = EXMESH_ROOT / "train.py"
 
 
+def _widget_number(value):
+    """Accept numbers formatted by the widget's Format Text node.
+
+    Unreal formats 3000 as "3,000" (digit grouping). Pass numbers to Python
+    as quoted strings, e.g. iterations="{Iterations}", and they are parsed here.
+    """
+    if isinstance(value, str):
+        return value.replace(",", "").replace("\u00a0", "").strip()
+    return value
+
+
 
 
 
@@ -1993,7 +2004,7 @@ def start_exmesh_run(
 
 
 
-            float(iterations)
+            float(_widget_number(iterations))
 
 
 
@@ -8590,10 +8601,10 @@ def start_auto_lod_pipeline(
             return
 
     try:
-        iterations = int(float(iterations))
-        ratio = float(ratio)
-        importance_lambda = float(importance_lambda)
-        lod1_screen_size = float(lod1_screen_size)
+        iterations = int(float(_widget_number(iterations)))
+        ratio = float(_widget_number(ratio))
+        importance_lambda = float(_widget_number(importance_lambda))
+        lod1_screen_size = float(_widget_number(lod1_screen_size))
     except (TypeError, ValueError):
         unreal.log_error("Invalid Auto LOD parameter value.")
         return
