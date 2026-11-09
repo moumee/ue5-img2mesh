@@ -8282,6 +8282,53 @@ def _export_auto_lod_exmesh_result():
     unreal.log(f"Importance: {face_importance}")
 
 
+
+def _ensure_lod_v2_configured():
+    """Create Saved/ExMeshLOD/settings.json from the bridge paths if missing."""
+    import reconstruction_lod_v2 as v2
+
+    if v2._SETTINGS.is_file():
+        return v2
+    v2.configure_lod_v2(
+        exmesh_python=EXTERNAL_PYTHON,
+        exmesh_root=str(EXMESH_ROOT),
+    )
+    return v2
+
+
+def _start_auto_lod_ppq():
+    """Hand the exported ExMesh result to the PPQ LOD pipeline (lod_v2 accurate).
+
+    PPQ weights -> photometric Wild simplification -> appearance refine ->
+    Unreal import with LODs. The legacy tick stops here; lod_v2 has its own.
+    """
+    global _auto_lod_tick_handle
+    state = _auto_lod_pipeline
+    v2 = _ensure_lod_v2_configured()
+    ratio = float(state["ratio"])
+    screen_size = float(state["lod1_screen_size"])
+    state["stage"] = "PPQ_V2"
+    state["process"] = None
+    _write_auto_lod_state()
+    if _auto_lod_tick_handle is not None:
+        unreal.unregister_slate_post_tick_callback(_auto_lod_tick_handle)
+        _auto_lod_tick_handle = None
+    work_dir = v2.start_accurate_lod_v2(
+        str(state["output_dir"]),
+        iteration=int(state["iteration"]),
+        ratios=(ratio,),
+        screen_sizes=(1.0, screen_size),
+        refine_mode="full",
+        scale=100.0,
+    )
+    state["ppq_work_dir"] = work_dir
+    _write_auto_lod_state()
+    _update_status_widgets("Auto LOD 2/3 - PPQ LOD (see Output Log)")
+    unreal.log("Auto LOD: handed off to PPQ LOD pipeline (reconstruction_lod_v2)")
+    unreal.log(f"PPQ work dir: {work_dir}")
+    unreal.log("Status: import reconstruction_lod_v2 as v2; v2.get_lod_v2_status(True)")
+
+
 def _start_auto_lod_modified_wildmesh():
     import os
     state = _auto_lod_pipeline
@@ -8463,7 +8510,9 @@ def _auto_lod_tick(delta_seconds):
                 return
             _update_status_widgets("Auto LOD 1/3 - Exporting ExMesh")
             _export_auto_lod_exmesh_result()
-            _start_auto_lod_modified_wildmesh()
+            # Sobel-weighted modified WildMesh is obsolete: continue with the
+            # PPQ (photometric quadric) pipeline in reconstruction_lod_v2.
+            _start_auto_lod_ppq()
             return
 
         if stage == "WILDMESH":
