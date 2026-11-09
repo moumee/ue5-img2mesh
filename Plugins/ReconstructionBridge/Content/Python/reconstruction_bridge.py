@@ -8571,7 +8571,7 @@ def _auto_lod_tick(delta_seconds):
 
 
 def start_auto_lod_pipeline(
-    iterations=100,
+    iterations=10000,
     ratio=0.1,
     importance_lambda=4.0,
     lod1_screen_size=0.35,
