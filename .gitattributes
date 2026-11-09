@@ -88,3 +88,6 @@
 *.pth    filter=lfs diff=lfs merge=lfs -text
 *.ckpt   filter=lfs diff=lfs merge=lfs -text
 *.onnx   filter=lfs diff=lfs merge=lfs -text
+# Windows batch files must keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
