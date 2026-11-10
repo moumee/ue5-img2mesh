@@ -2,17 +2,24 @@
 rem ---------------------------------------------------------------------------
 rem  ReconstructionBridge - one-time setup (Windows)
 rem
+rem  Usually started from the editor: Tools > Reconstruction Bridge Setup.
+rem
 rem  Installs:
-rem    exmesh   conda env for ExMesh training (PyTorch + CUDA extensions)
-rem    prep     conda env "rb_prep" for preprocessing (Depth Anything 3 + rembg)
-rem    colmap   COLMAP 4.2.1 (CUDA build) into ThirdParty\COLMAP
+rem    submodule  ThirdParty\ExMesh (git submodule update --init --recursive)
+rem    exmesh     conda env for ExMesh training (PyTorch + prebuilt CUDA extensions)
+rem    prep       conda env "rb_prep" for preprocessing (Depth Anything 3 + rembg)
+rem    colmap     COLMAP 4.2.1 (CUDA build) into ThirdParty\COLMAP
 rem
 rem  Requirements (install first):
-rem    - Miniconda / Anaconda
-rem    - NVIDIA driver; for "exmesh" also CUDA Toolkit 12.1 (CUDA_PATH)
-rem      and Visual Studio 2022 Build Tools ("Desktop development with C++")
+rem    - Miniconda (or Anaconda / Miniforge)
+rem    - git, NVIDIA GPU (RTX 20 series or newer, RTX 50 not supported) + driver
 rem
-rem  Usage:  setup_exmesh_env.bat [all^|exmesh^|prep^|colmap]   (default: all)
+rem  The CUDA extensions (simple-knn, diff-plane-rasterization, nvdiffrast,
+rem  pytorch3d) are downloaded prebuilt from the GitHub release below, so CUDA
+rem  Toolkit and Visual Studio are NOT needed. "exmesh-src" compiles them from
+rem  source instead (needs CUDA Toolkit 12.1 + VS 2022 C++ Build Tools).
+rem
+rem  Usage:  setup_exmesh_env.bat [all^|exmesh^|exmesh-src^|prep^|colmap]   (default: all)
 rem  Existing conda envs are reused, never deleted.
 rem ---------------------------------------------------------------------------
 setlocal EnableExtensions
@@ -23,12 +30,20 @@ if "%TARGET%"=="" set "TARGET=all"
 set "EXMESH_ENV=exmesh"
 set "PREP_ENV=rb_prep"
 set "PLUGIN_DIR=%~dp0.."
+set "PROJECT_DIR=%~dp0..\..\.."
 set "EXMESH=%PLUGIN_DIR%\ThirdParty\ExMesh"
 set "COLMAP_DIR=%PLUGIN_DIR%\ThirdParty\COLMAP"
 set "COLMAP_URL=https://github.com/colmap/colmap/releases/download/4.2.1/colmap-x64-windows-cuda.zip"
 set "DA3_REF=3d835ec1a5802d64a8b8b15f817a1ab54809bfe4"
 set "TORCH_PKGS=torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1"
 set "TORCH_INDEX=https://download.pytorch.org/whl/cu121"
+
+rem Prebuilt CUDA extension wheels (built by Setup\build_exmesh_wheels.bat).
+set "WHEEL_DIR=%~dp0wheels"
+set "WHEEL_URL=https://github.com/moumee/ue5-img2mesh/releases/download/exmesh-wheels-cu121-py311"
+set "WHEELS=simple_knn-0.0.0-cp311-cp311-win_amd64.whl diff_plane_rasterization-0.0.0-cp311-cp311-win_amd64.whl nvdiffrast-0.4.0-cp311-cp311-win_amd64.whl pytorch3d-0.7.9-cp311-cp311-win_amd64.whl"
+set "NVDIFFRAST_REF=v0.4.0"
+set "PYTORCH3D_REF=v0.7.9"
 
 if /I "%TARGET%"=="colmap" goto :colmap_only
 
@@ -44,7 +59,8 @@ for %%D in (
 ) do if not defined CONDA if exist "%%~D\condabin\conda.bat" set "CONDA=%%~D\condabin\conda.bat"
 if not defined CONDA for /f "delims=" %%C in ('where conda.bat 2^>nul') do if not defined CONDA set "CONDA=%%C"
 if not defined CONDA (
-    echo [ERROR] conda not found. Install Miniconda first.
+    echo [ERROR] conda not found. Install Miniconda first:
+    echo         https://docs.conda.io/en/latest/miniconda.html
     exit /b 1
 )
 echo Using conda: %CONDA%
@@ -55,10 +71,13 @@ if /I "%TARGET%"=="all" (
     call :setup_colmap || goto :fail
 ) else if /I "%TARGET%"=="exmesh" (
     call :setup_exmesh || goto :fail
+) else if /I "%TARGET%"=="exmesh-src" (
+    set "FROM_SOURCE=1"
+    call :setup_exmesh || goto :fail
 ) else if /I "%TARGET%"=="prep" (
     call :setup_prep || goto :fail
 ) else (
-    echo [ERROR] unknown target "%TARGET%". Use all, exmesh, prep or colmap.
+    echo [ERROR] unknown target "%TARGET%". Use all, exmesh, exmesh-src, prep or colmap.
     exit /b 1
 )
 echo.
@@ -88,34 +107,83 @@ if not "%ENV_MISSING%"=="0" (
 exit /b 0
 
 rem ===========================================================================
+:ensure_submodule
+if exist "%EXMESH%\train.py" exit /b 0
+echo ExMesh submodule is empty - fetching it ...
+where git >nul 2>nul || (
+    echo [ERROR] git not found. Install git, or run in the project root:
+    echo         git submodule update --init --recursive
+    exit /b 1
+)
+git -C "%PROJECT_DIR%" submodule update --init --recursive || exit /b 1
+if not exist "%EXMESH%\train.py" (
+    echo [ERROR] ExMesh submodule not found after update: %EXMESH%
+    exit /b 1
+)
+exit /b 0
+
+rem ===========================================================================
 :setup_exmesh
 echo.
 echo ===== ExMesh training env "%EXMESH_ENV%" =====
-if not exist "%EXMESH%\train.py" (
-    echo [ERROR] ExMesh submodule not found: %EXMESH%
-    echo         Run in the project root:  git submodule update --init --recursive
+call :ensure_submodule || exit /b 1
+call :ensure_env %EXMESH_ENV% || exit /b 1
+set "RUN=call "%CONDA%" run -n %EXMESH_ENV% --no-capture-output"
+%RUN% python -c "import sys; sys.exit(0 if sys.version_info[:2] == (3, 11) else 1)" || (
+    echo [ERROR] conda env "%EXMESH_ENV%" is not Python 3.11. The prebuilt wheels need 3.11.
+    echo         Remove it with "conda env remove -n %EXMESH_ENV%" and run this again.
     exit /b 1
 )
+pushd "%EXMESH%" || exit /b 1
+%RUN% python -m pip install %TORCH_PKGS% --index-url %TORCH_INDEX% || goto :exmesh_fail
+%RUN% python -m pip install -r requirements.txt || goto :exmesh_fail
+popd
+if defined FROM_SOURCE (
+    call :exmesh_ext_source || exit /b 1
+) else (
+    call :exmesh_ext_wheels || exit /b 1
+)
+%RUN% python -c "import torch, nvdiffrast.torch, pytorch3d, simple_knn._C, diff_plane_rasterization; print('exmesh: torch', torch.__version__, 'cuda', torch.cuda.is_available())" || (
+    echo [ERROR] ExMesh CUDA extensions failed to import.
+    exit /b 1
+)
+exit /b 0
+:exmesh_fail
+popd
+exit /b 1
+
+:exmesh_ext_wheels
+if not exist "%WHEEL_DIR%" mkdir "%WHEEL_DIR%"
+set "WHEEL_FILES="
+for %%W in (%WHEELS%) do (
+    if not exist "%WHEEL_DIR%\%%W" (
+        echo Downloading %%W ...
+        curl.exe -L --fail -o "%WHEEL_DIR%\%%W" "%WHEEL_URL%/%%W" || (
+            del "%WHEEL_DIR%\%%W" >nul 2>nul
+            echo [ERROR] Download failed: %WHEEL_URL%/%%W
+            exit /b 1
+        )
+    )
+    call set "WHEEL_FILES=%%WHEEL_FILES%% "%WHEEL_DIR%\%%W""
+)
+%RUN% python -m pip install --force-reinstall --no-deps %WHEEL_FILES% || exit /b 1
+rem pytorch3d runtime dependency (pulled in by --no-deps above otherwise).
+%RUN% python -m pip install iopath || exit /b 1
+exit /b 0
+
+:exmesh_ext_source
 if not defined CUDA_PATH (
     echo [WARN] CUDA_PATH is not set. Compiling the CUDA extensions will likely fail.
 ) else (
     set "CUDA_HOME=%CUDA_PATH%"
 )
-call :ensure_env %EXMESH_ENV% || exit /b 1
-set "RUN=call "%CONDA%" run -n %EXMESH_ENV% --no-capture-output"
 pushd "%EXMESH%" || exit /b 1
-%RUN% python -m pip install %TORCH_PKGS% --index-url %TORCH_INDEX% || goto :exmesh_fail
-%RUN% python -m pip install -r requirements.txt || goto :exmesh_fail
-%RUN% python -m pip install git+https://github.com/NVlabs/nvdiffrast/ --no-build-isolation || goto :exmesh_fail
-%RUN% python -m pip install "git+https://github.com/facebookresearch/pytorch3d.git" --no-build-isolation || goto :exmesh_fail
+%RUN% python -m pip install "git+https://github.com/NVlabs/nvdiffrast.git@%NVDIFFRAST_REF%" --no-build-isolation || goto :exmesh_fail
+%RUN% python -m pip install "git+https://github.com/facebookresearch/pytorch3d.git@%PYTORCH3D_REF%" --no-build-isolation || goto :exmesh_fail
 %RUN% python -m pip install PGSR/submodules/diff-plane-rasterization --no-build-isolation || goto :exmesh_fail
 %RUN% python -m pip install PGSR/submodules/simple-knn --no-build-isolation || goto :exmesh_fail
 popd
-%RUN% python -c "import torch; print('exmesh: torch', torch.__version__, 'cuda', torch.cuda.is_available())"
 exit /b 0
-:exmesh_fail
-popd
-exit /b 1
 
 rem ===========================================================================
 :setup_prep

@@ -162,12 +162,12 @@ def check_requirements():
     if not prep_python().is_file():
         problems.append(
             f"Preprocessing Python env not found: {prep_python()}\n"
-            "  -> run Plugins/ReconstructionBridge/Setup/setup_exmesh_env.bat (or set RB_PREP_PYTHON)"
+            "  -> run Tools > Reconstruction Bridge Setup... (or set RB_PREP_PYTHON)"
         )
     if colmap_executable() is None:
         problems.append(
             "COLMAP not found in Plugins/ReconstructionBridge/ThirdParty/COLMAP\n"
-            "  -> run Setup/setup_exmesh_env.bat (or set COLMAP_EXE)"
+            "  -> run Tools > Reconstruction Bridge Setup... (or set COLMAP_EXE)"
         )
     if not PREPARE_SCRIPT.is_file():
         problems.append(f"Missing script: {PREPARE_SCRIPT}")

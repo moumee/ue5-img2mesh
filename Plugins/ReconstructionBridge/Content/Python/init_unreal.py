@@ -8,3 +8,10 @@ try:
     reconstruction_bridge_menu.register()
 except Exception as exc:  # never break editor startup
     unreal.log_error(f"ReconstructionBridge: failed to register menus: {exc}")
+
+try:
+    import reconstruction_setup
+
+    reconstruction_setup.prompt_if_missing()
+except Exception as exc:  # never break editor startup
+    unreal.log_warning(f"ReconstructionBridge: setup check failed: {exc}")

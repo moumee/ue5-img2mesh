@@ -22,24 +22,45 @@ ReconstructionBridge/
 
 ## 처음 설치
 
-1. **submodule 받기** (ExMesh가 비어 있으면 플러그인이 동작하지 않음)
-   ```bash
-   git clone --recurse-submodules https://github.com/moumee/ue5-img2mesh.git
-   # 이미 클론했다면
-   git submodule update --init --recursive
-   ```
-2. **환경 설치**: Miniconda, CUDA Toolkit 12.1, VS 2022 C++ Build Tools를 먼저 설치한 뒤
-   ```bat
-   Plugins\ReconstructionBridge\Setup\setup_exmesh_env.bat          :: 전부
-   Plugins\ReconstructionBridge\Setup\setup_exmesh_env.bat prep     :: 전처리 환경만
-   Plugins\ReconstructionBridge\Setup\setup_exmesh_env.bat colmap   :: COLMAP만
-   ```
-   - `exmesh`: ExMesh 학습 환경
-   - `rb_prep`: 전처리 환경 (Depth Anything 3 + rembg)
-   - `ThirdParty/COLMAP`: COLMAP (약 400MB 다운로드)
+필요한 것: **NVIDIA GPU (RTX 20~40 시리즈)**, **[Miniconda](https://docs.conda.io/en/latest/miniconda.html)**, git.
+CUDA Toolkit이나 Visual Studio는 필요 없습니다 (CUDA 확장은 미리 빌드된 wheel을 받음).
 
-   이미 있는 conda 환경은 지우지 않고 그대로 재사용합니다. 모델 가중치(DA3-BASE 약 0.5GB, rembg 약 220MB)는 처음 전처리할 때 자동으로 받습니다.
-3. **데이터셋**: 영상/사진 폴더는 아래 자동 전처리를 쓰면 됩니다. 이미 전처리된 데이터셋(DTU 등)은
+1. Miniconda 설치 (기본 옵션)
+2. 프로젝트 pull 후 에디터 열기
+3. "Reconstruction Bridge is not set up..." 창에서 **Yes**
+   (또는 **Tools → Reconstruction Bridge Setup...**)
+4. 콘솔 창에 `Setup finished.`가 뜨면 에디터 재시작
+
+설치 버튼은 아래를 자동으로 합니다 (약 8~10GB 다운로드, 10~30분):
+- `ThirdParty/ExMesh` submodule 받기 (`git submodule update --init --recursive`)
+- `exmesh`: ExMesh 학습 환경 (PyTorch + 미리 빌드된 CUDA 확장)
+- `rb_prep`: 전처리 환경 (Depth Anything 3 + rembg)
+- `ThirdParty/COLMAP`: COLMAP (약 400MB)
+
+이미 있는 conda 환경은 지우지 않고 그대로 재사용합니다. 모델 가중치(DA3-BASE 약 0.5GB, rembg 약 220MB)는 처음 전처리할 때 자동으로 받습니다.
+명령줄에서 직접 돌릴 수도 있습니다:
+```bat
+Plugins\ReconstructionBridge\Setup\setup_exmesh_env.bat              :: 전부
+Plugins\ReconstructionBridge\Setup\setup_exmesh_env.bat prep         :: 전처리 환경만
+Plugins\ReconstructionBridge\Setup\setup_exmesh_env.bat colmap       :: COLMAP만
+Plugins\ReconstructionBridge\Setup\setup_exmesh_env.bat exmesh-src   :: CUDA 확장을 소스에서 컴파일 (CUDA Toolkit 12.1 + VS 2022 필요)
+```
+
+### CUDA 확장 wheel 다시 빌드하기 (관리자용)
+
+`simple-knn`, `diff-plane-rasterization`, `nvdiffrast`, `pytorch3d`는 GitHub 릴리스
+[`exmesh-wheels-cu121-py311`](https://github.com/moumee/ue5-img2mesh/releases/tag/exmesh-wheels-cu121-py311)에서 받습니다.
+Python 3.11 + torch 2.5.1+cu121 + GPU 아키텍처 7.5/8.0/8.6/8.9/9.0 전용이라, 이 중 하나라도 바꾸면 다시 빌드해야 합니다
+(CUDA Toolkit 12.1 + VS 2022 Build Tools의 MSVC 14.39 필요).
+```bat
+Plugins\ReconstructionBridge\Setup\build_exmesh_wheels.bat
+gh release upload exmesh-wheels-cu121-py311 Plugins\ReconstructionBridge\Setup\wheels\*.whl --clobber
+```
+파일 이름이 바뀌면 `setup_exmesh_env.bat`의 `WHEELS` 목록도 맞춰 주세요.
+
+### 데이터셋
+
+영상/사진 폴더는 아래 자동 전처리를 쓰면 됩니다. 이미 전처리된 데이터셋(DTU 등)은
    `ThirdParty/ExMesh/workdir/` 아래에 두거나(`git`에는 안 올라감), 다른 곳이면 `EXMESH_WORKDIR`로 지정합니다.
 
 ## 영상 / 사진 폴더로 바로 돌리기 (자동 전처리)
