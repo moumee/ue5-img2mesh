@@ -8,12 +8,8 @@ rem  Visual Studio Build Tools on every PC.
 rem
 rem  Requirements: the "exmesh" conda env (setup_exmesh_env.bat exmesh-src),
 rem                CUDA Toolkit 12.1 (CUDA_PATH), VS 2022 C++ Build Tools.
-rem  Output:       Setup\wheels\*.whl  (git ignored)
-rem
-rem  Then upload them to the GitHub release named in setup_exmesh_env.bat:
-rem    gh release create exmesh-wheels-cu121-py311 Setup\wheels\*.whl ^
-rem       --repo moumee/ue5-img2mesh --title "ExMesh CUDA wheels (cu121, py311)"
-rem  (or "gh release upload <tag> Setup\wheels\*.whl --clobber" to replace)
+rem  Output:       Setup\wheels\*.whl  (committed to git; setup_exmesh_env.bat
+rem                installs them). Update WHEELS there if the file names change.
 rem
 rem  The wheels only work with: Python 3.11, torch 2.5.1+cu121, and the GPU
 rem  architectures in TORCH_CUDA_ARCH_LIST below. Rebuild if any of these change.

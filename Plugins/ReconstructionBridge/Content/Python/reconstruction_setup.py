@@ -106,7 +106,7 @@ def run_setup():
         TITLE,
         status
         + "\n\nSetup opens a console window and downloads about 8-10 GB "
-        "(PyTorch x2, COLMAP, prebuilt CUDA extensions). It takes 10-30 minutes.\n"
+        "(PyTorch x2, COLMAP). It takes 10-30 minutes.\n"
         "Requires an NVIDIA GPU (RTX 20-40 series).\n\n"
         "When the console says \"Setup finished.\", restart the editor.\n\n"
         "Start setup now?",

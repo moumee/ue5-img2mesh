@@ -15,8 +15,8 @@ rem    - Miniconda (or Anaconda / Miniforge)
 rem    - git, NVIDIA GPU (RTX 20 series or newer, RTX 50 not supported) + driver
 rem
 rem  The CUDA extensions (simple-knn, diff-plane-rasterization, nvdiffrast,
-rem  pytorch3d) are downloaded prebuilt from the GitHub release below, so CUDA
-rem  Toolkit and Visual Studio are NOT needed. "exmesh-src" compiles them from
+rem  pytorch3d) are installed from the prebuilt wheels in Setup\wheels (committed
+rem  to git), so CUDA Toolkit and Visual Studio are NOT needed. "exmesh-src" compiles them from
 rem  source instead (needs CUDA Toolkit 12.1 + VS 2022 C++ Build Tools).
 rem
 rem  Usage:  setup_exmesh_env.bat [all^|exmesh^|exmesh-src^|prep^|colmap]   (default: all)
@@ -38,9 +38,8 @@ set "DA3_REF=3d835ec1a5802d64a8b8b15f817a1ab54809bfe4"
 set "TORCH_PKGS=torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1"
 set "TORCH_INDEX=https://download.pytorch.org/whl/cu121"
 
-rem Prebuilt CUDA extension wheels (built by Setup\build_exmesh_wheels.bat).
+rem Prebuilt CUDA extension wheels (built by Setup\build_exmesh_wheels.bat, committed to git).
 set "WHEEL_DIR=%~dp0wheels"
-set "WHEEL_URL=https://github.com/moumee/ue5-img2mesh/releases/download/exmesh-wheels-cu121-py311"
 set "WHEELS=simple_knn-0.0.0-cp311-cp311-win_amd64.whl diff_plane_rasterization-0.0.0-cp311-cp311-win_amd64.whl nvdiffrast-0.4.0-cp311-cp311-win_amd64.whl pytorch3d-0.7.9-cp311-cp311-win_amd64.whl"
 set "NVDIFFRAST_REF=v0.4.0"
 set "PYTORCH3D_REF=v0.7.9"
@@ -153,16 +152,12 @@ popd
 exit /b 1
 
 :exmesh_ext_wheels
-if not exist "%WHEEL_DIR%" mkdir "%WHEEL_DIR%"
 set "WHEEL_FILES="
 for %%W in (%WHEELS%) do (
     if not exist "%WHEEL_DIR%\%%W" (
-        echo Downloading %%W ...
-        curl.exe -L --fail -o "%WHEEL_DIR%\%%W" "%WHEEL_URL%/%%W" || (
-            del "%WHEEL_DIR%\%%W" >nul 2>nul
-            echo [ERROR] Download failed: %WHEEL_URL%/%%W
-            exit /b 1
-        )
+        echo [ERROR] Prebuilt wheel not found: %WHEEL_DIR%\%%W
+        echo         Pull the latest project, or use "setup_exmesh_env.bat exmesh-src".
+        exit /b 1
     )
     call set "WHEEL_FILES=%%WHEEL_FILES%% "%WHEEL_DIR%\%%W""
 )

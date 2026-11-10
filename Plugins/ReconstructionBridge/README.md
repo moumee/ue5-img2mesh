@@ -23,7 +23,7 @@ ReconstructionBridge/
 ## 처음 설치
 
 필요한 것: **NVIDIA GPU (RTX 20~40 시리즈)**, **[Miniconda](https://docs.conda.io/en/latest/miniconda.html)**, git.
-CUDA Toolkit이나 Visual Studio는 필요 없습니다 (CUDA 확장은 미리 빌드된 wheel을 받음).
+CUDA Toolkit이나 Visual Studio는 필요 없습니다 (CUDA 확장은 `Setup/wheels/`의 미리 빌드된 wheel로 설치).
 
 1. Miniconda 설치 (기본 옵션)
 2. 프로젝트 pull 후 에디터 열기
@@ -48,15 +48,14 @@ Plugins\ReconstructionBridge\Setup\setup_exmesh_env.bat exmesh-src   :: CUDA 확
 
 ### CUDA 확장 wheel 다시 빌드하기 (관리자용)
 
-`simple-knn`, `diff-plane-rasterization`, `nvdiffrast`, `pytorch3d`는 GitHub 릴리스
-[`exmesh-wheels-cu121-py311`](https://github.com/moumee/ue5-img2mesh/releases/tag/exmesh-wheels-cu121-py311)에서 받습니다.
+`simple-knn`, `diff-plane-rasterization`, `nvdiffrast`, `pytorch3d`는 `Setup/wheels/`에 커밋된 wheel로 설치합니다.
 Python 3.11 + torch 2.5.1+cu121 + GPU 아키텍처 7.5/8.0/8.6/8.9/9.0 전용이라, 이 중 하나라도 바꾸면 다시 빌드해야 합니다
 (CUDA Toolkit 12.1 + VS 2022 Build Tools의 MSVC 14.39 필요).
 ```bat
 Plugins\ReconstructionBridge\Setup\build_exmesh_wheels.bat
-gh release upload exmesh-wheels-cu121-py311 Plugins\ReconstructionBridge\Setup\wheels\*.whl --clobber
 ```
-파일 이름이 바뀌면 `setup_exmesh_env.bat`의 `WHEELS` 목록도 맞춰 주세요.
+새 wheel을 커밋하고, 파일 이름이 바뀌면 `setup_exmesh_env.bat`의 `WHEELS` 목록도 맞춰 주세요.
+라이선스: nvdiffrast(NVIDIA Source Code License), simple-knn / diff-plane-rasterization(Inria)은 비상업 라이선스, pytorch3d는 BSD-3-Clause입니다.
 
 ### 데이터셋
 

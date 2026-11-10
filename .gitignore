@@ -178,5 +178,4 @@ $RECYCLE.BIN/
 *~
 # ReconstructionBridge: downloaded by Setup/setup_exmesh_env.bat
 Plugins/ReconstructionBridge/ThirdParty/COLMAP/
-Plugins/ReconstructionBridge/Setup/wheels/
 Plugins/ReconstructionBridge/ThirdParty/_downloads/
