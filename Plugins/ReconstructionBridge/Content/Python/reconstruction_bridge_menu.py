@@ -18,6 +18,12 @@ ICON_NAME = "ClassIcon.StaticMesh"
 
 OPEN_COMMAND = "import reconstruction_bridge_menu; reconstruction_bridge_menu.open_window()"
 
+SETUP_ENTRY_NAME = "ReconstructionBridgeSetup"
+SETUP_LABEL = "Reconstruction Bridge Setup..."
+SETUP_TOOLTIP = "Install or repair ExMesh, the conda envs and COLMAP (needs Miniconda)"
+SETUP_ICON_NAME = "Icons.Download"
+SETUP_COMMAND = "import reconstruction_setup; reconstruction_setup.run_setup()"
+
 # Menus extended by this module.
 TOOLS_MENU = "LevelEditor.MainMenu.Tools"
 TOOLBAR_MENU = "LevelEditor.LevelEditorToolBar.User"
@@ -59,6 +65,23 @@ def _make_entry(block_type):
     return entry
 
 
+def _make_setup_entry():
+    entry = unreal.ToolMenuEntry(
+        name=SETUP_ENTRY_NAME,
+        type=unreal.MultiBlockType.MENU_ENTRY,
+        owner=unreal.ToolMenuOwner(MENU_OWNER),
+    )
+    entry.set_label(SETUP_LABEL)
+    entry.set_tool_tip(SETUP_TOOLTIP)
+    entry.set_icon(ICON_STYLE, SETUP_ICON_NAME)
+    entry.set_string_command(
+        unreal.ToolMenuStringCommandType.PYTHON,
+        "",
+        SETUP_COMMAND,
+    )
+    return entry
+
+
 def register():
     menus = unreal.ToolMenus.get()
 
@@ -67,6 +90,7 @@ def register():
     tools_menu.add_menu_entry(
         SECTION_NAME, _make_entry(unreal.MultiBlockType.MENU_ENTRY)
     )
+    tools_menu.add_menu_entry(SECTION_NAME, _make_setup_entry())
 
     toolbar = menus.extend_menu(TOOLBAR_MENU)
     toolbar.add_section(SECTION_NAME, LABEL)

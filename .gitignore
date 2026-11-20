@@ -176,6 +176,7 @@ $RECYCLE.BIN/
 *.swp
 *.swo
 *~
-# ReconstructionBridge: downloaded by Setup/setup_exmesh_env.bat
+# ReconstructionBridge: downloaded by Setup/setup_exmesh_env.bat and Setup/setup_pixal3d.bat
 Plugins/ReconstructionBridge/ThirdParty/COLMAP/
+Plugins/ReconstructionBridge/ThirdParty/ComfyUI/
 Plugins/ReconstructionBridge/ThirdParty/_downloads/
