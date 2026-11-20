@@ -3,6 +3,8 @@ rem ---------------------------------------------------------------------------
 rem  ReconstructionBridge - Pixal3D quick generation (Windows)
 rem
 rem  Lets the quick mode (Run Quick LOD) generate with Pixal3D instead of TripoSR.
+rem  Usually run by setup_exmesh_env.bat (Tools > Reconstruction Bridge Setup),
+rem  which installs it with everything else ("all") or alone ("pixal3d").
 rem  Installs:
 rem    ComfyUI v0.46.0     ThirdParty\ComfyUI (native TRELLIS.2 / Pixal3D nodes)
 rem    conda env "comfyui" Python 3.13, PyTorch cu130, ComfyUI requirements, trimesh
@@ -11,7 +13,7 @@ rem                        "trellis2" also downloads the TRELLIS.2 model (5.3 GB
 rem
 rem  The quick mode finds these locations by itself. To use another ComfyUI or env,
 rem  set "comfyui_repo" / "comfyui_python" in Saved\ExMeshLOD\settings.json.
-rem  Requirements: Miniconda, git, curl (Windows 10+), NVIDIA GPU with a driver for CUDA 13.
+rem  Requirements: Miniconda, git, curl (Windows 10+), NVIDIA GPU with driver 580 or newer (CUDA 13).
 rem
 rem  Usage:  setup_pixal3d.bat [trellis2]     re-running skips what is installed
 rem ---------------------------------------------------------------------------

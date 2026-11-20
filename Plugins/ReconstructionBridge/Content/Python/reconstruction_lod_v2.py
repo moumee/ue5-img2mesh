@@ -66,34 +66,57 @@ def _settings():
 
 
 _PLUGIN_ROOT = Path(__file__).resolve().parents[2]
+# Downloaded by Setup/setup_pixal3d.bat into <ComfyUI>/models, after the conda env.
+PIXAL3D_WEIGHTS = (
+    "diffusion_models/pixal3d_int8_convrot.safetensors",
+    "vae/trellis_2_shape_vae_bf16.safetensors",
+    "vae/trellis_2_texture_vae_bf16.safetensors",
+    "clip_vision/dino_v3_L_naf_fp32.safetensors",
+    "background_removal/birefnet.safetensors",
+    "geometry_estimation/moge_2_vitl_normal_fp16.safetensors",
+)
+
+
+def _pixal3d_paths(config):
+    """(python, ComfyUI folder): settings comfyui_python / comfyui_repo, else the
+    conda env "comfyui" and ThirdParty/ComfyUI, where Setup installs them."""
+    import reconstruction_prepare
+
+    python = Path(config.get("comfyui_python")
+                  or reconstruction_prepare._find_conda_env_python("comfyui"))
+    repo = Path(config.get("comfyui_repo") or _PLUGIN_ROOT / "ThirdParty" / "ComfyUI")
+    return python, repo
+
+
+def pixal3d_installed(config):
+    """True when the ComfyUI env, ComfyUI and every Pixal3D weight are present."""
+    python, repo = _pixal3d_paths(config)
+    return (_exists(python) and (repo / "main.py").is_file()
+            and all(_exists(repo / "models" / name) for name in PIXAL3D_WEIGHTS))
 
 
 def _quick_generator(config):
     """Generator for quick mode: ("PIXAL3D" | "TRIPOSR", python, repo).
 
-    Pixal3D runs through ComfyUI (Setup/setup_pixal3d.bat installs it). Paths come from
-    settings.json comfyui_python / comfyui_repo, else the conda env "comfyui" and
-    ThirdParty/ComfyUI. Without ComfyUI it falls back to TripoSR.
+    Pixal3D runs through ComfyUI, installed by Tools > Reconstruction Bridge Setup
+    (Setup/setup_pixal3d.bat). Without it the quick mode falls back to TripoSR.
     settings.json "quick_generator": "pixal3d" or "triposr" forces one of them.
     """
-    import reconstruction_prepare
-
     choice = str(config.get("quick_generator", "auto")).lower()
     if choice != "triposr":
-        python = Path(config.get("comfyui_python")
-                      or reconstruction_prepare._find_conda_env_python("comfyui"))
-        repo = Path(config.get("comfyui_repo") or _PLUGIN_ROOT / "ThirdParty" / "ComfyUI")
+        python, repo = _pixal3d_paths(config)
         script = Path(config["exmesh_root"]) / "quick_generation" / "comfyui_generate.py"
-        if _exists(python) and (repo / "main.py").is_file() and _exists(script):
+        if pixal3d_installed(config) and _exists(script):
             return "PIXAL3D", python, repo
         if choice == "pixal3d":
-            raise RuntimeError(f"Pixal3D (ComfyUI) not found: python {python}, ComfyUI {repo}. "
-                               "Run Setup/setup_pixal3d.bat")
-        unreal.log_warning("Quick mode: ComfyUI (Pixal3D) not installed, using TripoSR")
+            raise RuntimeError(f"Pixal3D is not fully installed (python {python}, ComfyUI {repo}). "
+                               "Run Tools > Reconstruction Bridge Setup...")
+        unreal.log_warning("Quick mode: Pixal3D is not installed (Tools > Reconstruction Bridge "
+                           "Setup...), using TripoSR")
     for key in ("triposr_python", "triposr_repo"):
         if not config.get(key):
             raise RuntimeError(f"Configure {key} for quick mode, or install Pixal3D "
-                               "with Setup/setup_pixal3d.bat")
+                               "with Tools > Reconstruction Bridge Setup...")
     if not Path(config["triposr_repo"]).is_dir():
         raise FileNotFoundError(config["triposr_repo"])
     return "TRIPOSR", Path(config["triposr_python"]), Path(config["triposr_repo"])

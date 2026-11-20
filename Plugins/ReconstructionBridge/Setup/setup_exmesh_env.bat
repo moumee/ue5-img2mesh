@@ -9,17 +9,20 @@ rem    submodule  ThirdParty\ExMesh (git submodule update --init --recursive)
 rem    exmesh     conda env for ExMesh training (PyTorch + prebuilt CUDA extensions)
 rem    prep       conda env "rb_prep" for preprocessing (Depth Anything 3 + rembg)
 rem    colmap     COLMAP 4.2.1 (CUDA build) into ThirdParty\COLMAP
+rem    pixal3d    Pixal3D for the quick mode: ComfyUI, conda env "comfyui" and about
+rem               10 GB of weights (runs setup_pixal3d.bat)
 rem
 rem  Requirements (install first):
 rem    - Miniconda (or Anaconda / Miniforge)
 rem    - git, NVIDIA GPU (RTX 20 series or newer, RTX 50 not supported) + driver
+rem      (580 or newer for Pixal3D, which uses CUDA 13)
 rem
 rem  The CUDA extensions (simple-knn, diff-plane-rasterization, nvdiffrast,
 rem  pytorch3d) are installed from the prebuilt wheels in Setup\wheels (committed
 rem  to git), so CUDA Toolkit and Visual Studio are NOT needed. "exmesh-src" compiles them from
 rem  source instead (needs CUDA Toolkit 12.1 + VS 2022 C++ Build Tools).
 rem
-rem  Usage:  setup_exmesh_env.bat [all^|exmesh^|exmesh-src^|prep^|colmap]   (default: all)
+rem  Usage:  setup_exmesh_env.bat [all^|exmesh^|exmesh-src^|prep^|colmap^|pixal3d]   (default: all)
 rem  Existing conda envs are reused, never deleted.
 rem ---------------------------------------------------------------------------
 setlocal EnableExtensions
@@ -43,6 +46,7 @@ set "WHEEL_DIR=%~dp0wheels"
 set "WHEELS=simple_knn-0.0.0-cp311-cp311-win_amd64.whl diff_plane_rasterization-0.0.0-cp311-cp311-win_amd64.whl nvdiffrast-0.4.0-cp311-cp311-win_amd64.whl pytorch3d-0.7.9-cp311-cp311-win_amd64.whl"
 set "NVDIFFRAST_REF=v0.4.0"
 set "PYTORCH3D_REF=v0.7.9"
+set "PIXAL3D_BAT=%~dp0setup_pixal3d.bat"
 
 if /I "%TARGET%"=="colmap" goto :colmap_only
 
@@ -68,6 +72,7 @@ if /I "%TARGET%"=="all" (
     call :setup_exmesh || goto :fail
     call :setup_prep || goto :fail
     call :setup_colmap || goto :fail
+    call :setup_pixal3d || goto :fail
 ) else if /I "%TARGET%"=="exmesh" (
     call :setup_exmesh || goto :fail
 ) else if /I "%TARGET%"=="exmesh-src" (
@@ -75,8 +80,10 @@ if /I "%TARGET%"=="all" (
     call :setup_exmesh || goto :fail
 ) else if /I "%TARGET%"=="prep" (
     call :setup_prep || goto :fail
+) else if /I "%TARGET%"=="pixal3d" (
+    call :setup_pixal3d || goto :fail
 ) else (
-    echo [ERROR] unknown target "%TARGET%". Use all, exmesh, exmesh-src, prep or colmap.
+    echo [ERROR] unknown target "%TARGET%". Use all, exmesh, exmesh-src, prep, colmap or pixal3d.
     exit /b 1
 )
 echo.
@@ -217,6 +224,13 @@ if not exist "%COLMAP_DIR%\COLMAP.bat" (
     exit /b 1
 )
 echo COLMAP installed: %COLMAP_DIR%
+exit /b 0
+
+rem ===========================================================================
+:setup_pixal3d
+echo.
+echo ===== Pixal3D quick generation (ComfyUI) =====
+call "%PIXAL3D_BAT%" || exit /b 1
 exit /b 0
 
 rem ===========================================================================

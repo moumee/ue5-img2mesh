@@ -1,14 +1,16 @@
 """One-click environment setup for ReconstructionBridge.
 
 Checks what the plugin needs outside Unreal (ExMesh submodule, the "exmesh" and
-"rb_prep" conda envs, COLMAP) and runs Setup/setup_exmesh_env.bat in a console
-window to install whatever is missing. The only manual prerequisite is Miniconda.
+"rb_prep" conda envs, COLMAP, ComfyUI for Pixal3D quick generation) and runs
+Setup/setup_exmesh_env.bat in a console window to install whatever is missing.
+The only manual prerequisite is Miniconda.
 
 Entry points:
     Tools > Reconstruction Bridge Setup...    -> run_setup()
     editor startup (once per session)         -> prompt_if_missing()
 """
 
+import json
 import os
 import shutil
 import subprocess
@@ -19,6 +21,7 @@ import unreal
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 SETUP_BAT = PLUGIN_ROOT / "Setup" / "setup_exmesh_env.bat"
 EXMESH_ROOT = PLUGIN_ROOT / "ThirdParty" / "ExMesh"
+PIXAL3D_ITEM = 'Pixal3D quick generation (ComfyUI, "comfyui" conda env)'
 MINICONDA_URL = "https://docs.conda.io/en/latest/miniconda.html"
 TITLE = "Reconstruction Bridge Setup"
 
@@ -66,7 +69,28 @@ def missing_components():
         missing.append('Preprocessing env ("rb_prep" conda env)')
     if reconstruction_prepare.colmap_executable() is None:
         missing.append("COLMAP")
+    if not pixal3d_ready():
+        missing.append(PIXAL3D_ITEM)
     return missing
+
+
+def pixal3d_ready():
+    """True when the quick mode can use Pixal3D, or when Pixal3D is not wanted
+    (Saved/ExMeshLOD/settings.json "quick_generator": "triposr")."""
+    import reconstruction_lod_v2
+
+    try:
+        settings = json.loads(reconstruction_lod_v2._SETTINGS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        settings = {}
+    if str(settings.get("quick_generator", "")).lower() == "triposr":
+        return True
+    return reconstruction_lod_v2.pixal3d_installed(settings)
+
+
+def setup_target(missing):
+    """Only Pixal3D missing: install just that; otherwise run the full setup."""
+    return "pixal3d" if missing == [PIXAL3D_ITEM] else "all"
 
 
 def _ask_install_miniconda():
@@ -98,22 +122,28 @@ def run_setup():
         _ask_install_miniconda()
         return
     missing = missing_components()
+    target = setup_target(missing)
     if missing:
         status = "Missing:\n  - " + "\n  - ".join(missing)
     else:
         status = "Everything is already installed. Running setup again repairs/updates it."
+    if target == "pixal3d":
+        size = ("Setup opens a console window and downloads about 13 GB "
+                "(PyTorch, ComfyUI, Pixal3D models). It takes 10-30 minutes.\n")
+    else:
+        size = ("Setup opens a console window and downloads about 20-25 GB "
+                "(PyTorch x3, COLMAP, Pixal3D models). It takes 20-60 minutes.\n")
     answer = unreal.EditorDialog.show_message(
         TITLE,
         status
-        + "\n\nSetup opens a console window and downloads about 8-10 GB "
-        "(PyTorch x2, COLMAP). It takes 10-30 minutes.\n"
-        "Requires an NVIDIA GPU (RTX 20-40 series).\n\n"
+        + "\n\n" + size
+        + "Requires an NVIDIA GPU (RTX 20-40 series) and driver 580 or newer (CUDA 13).\n\n"
         "When the console says \"Setup finished.\", restart the editor.\n\n"
         "Start setup now?",
         unreal.AppMsgType.YES_NO,
     )
     if answer == unreal.AppReturnType.YES:
-        launch_setup("all")
+        launch_setup(target)
 
 
 def prompt_if_missing():
