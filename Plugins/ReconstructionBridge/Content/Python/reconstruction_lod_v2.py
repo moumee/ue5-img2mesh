@@ -1,4 +1,4 @@
-"""Editor-only PPQ / TripoSR LOD pipeline for ReconstructionBridge.
+"""Editor-only PPQ / quick-generation (Pixal3D or TripoSR) LOD pipeline for ReconstructionBridge.
 
 Copy next to reconstruction_bridge.py. Configure once with configure_lod_v2().
 The existing ExMesh training/export and legacy Auto LOD commands are unchanged.
@@ -34,7 +34,7 @@ def _absolute(value, label):
 
 def configure_lod_v2(exmesh_python, exmesh_root, triposr_python=None,
                      triposr_repo=None, hf_home=None, u2net_home=None,
-                     work_dir=None):
+                     work_dir=None, comfyui_python=None, comfyui_repo=None):
     """Persist local machine paths. Run again to change them."""
     data = {
         "exmesh_python": str(_absolute(exmesh_python, "ExMeshPython")),
@@ -44,7 +44,9 @@ def configure_lod_v2(exmesh_python, exmesh_root, triposr_python=None,
     }
     for key, value in (("triposr_python", triposr_python),
                        ("triposr_repo", triposr_repo),
-                       ("hf_home", hf_home), ("u2net_home", u2net_home)):
+                       ("hf_home", hf_home), ("u2net_home", u2net_home),
+                       ("comfyui_python", comfyui_python),
+                       ("comfyui_repo", comfyui_repo)):
         if value:
             data[key] = str(_absolute(value, key))
     _SETTINGS.parent.mkdir(parents=True, exist_ok=True)
@@ -61,6 +63,40 @@ def _settings():
         if not data.get(key):
             raise RuntimeError(f"Missing LOD v2 setting: {key}")
     return data
+
+
+_PLUGIN_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _quick_generator(config):
+    """Generator for quick mode: ("PIXAL3D" | "TRIPOSR", python, repo).
+
+    Pixal3D runs through ComfyUI (Setup/setup_pixal3d.bat installs it). Paths come from
+    settings.json comfyui_python / comfyui_repo, else the conda env "comfyui" and
+    ThirdParty/ComfyUI. Without ComfyUI it falls back to TripoSR.
+    settings.json "quick_generator": "pixal3d" or "triposr" forces one of them.
+    """
+    import reconstruction_prepare
+
+    choice = str(config.get("quick_generator", "auto")).lower()
+    if choice != "triposr":
+        python = Path(config.get("comfyui_python")
+                      or reconstruction_prepare._find_conda_env_python("comfyui"))
+        repo = Path(config.get("comfyui_repo") or _PLUGIN_ROOT / "ThirdParty" / "ComfyUI")
+        script = Path(config["exmesh_root"]) / "quick_generation" / "comfyui_generate.py"
+        if _exists(python) and (repo / "main.py").is_file() and _exists(script):
+            return "PIXAL3D", python, repo
+        if choice == "pixal3d":
+            raise RuntimeError(f"Pixal3D (ComfyUI) not found: python {python}, ComfyUI {repo}. "
+                               "Run Setup/setup_pixal3d.bat")
+        unreal.log_warning("Quick mode: ComfyUI (Pixal3D) not installed, using TripoSR")
+    for key in ("triposr_python", "triposr_repo"):
+        if not config.get(key):
+            raise RuntimeError(f"Configure {key} for quick mode, or install Pixal3D "
+                               "with Setup/setup_pixal3d.bat")
+    if not Path(config["triposr_repo"]).is_dir():
+        raise FileNotFoundError(config["triposr_repo"])
+    return "TRIPOSR", Path(config["triposr_python"]), Path(config["triposr_repo"])
 
 
 def _exists(path):
@@ -165,8 +201,10 @@ def _run_step(step):
     config = _job["config"]
     root = Path(config["exmesh_root"])
     script = root / step["script"]
-    python = Path(config["triposr_python"] if step["stage"] == "TRIPOSR"
-                  else config["exmesh_python"])
+    if step["stage"] in ("TRIPOSR", "PIXAL3D"):
+        python = Path(config.get("generator_python") or config["triposr_python"])
+    else:
+        python = Path(config["exmesh_python"])
     for path in (script, python):
         if not _exists(path):
             raise FileNotFoundError(path)
@@ -183,6 +221,12 @@ def _run_step(step):
                               ("u2net_home", "U2NET_HOME")):
             if config.get(setting):
                 env[name] = config[setting]
+    if step["stage"] == "PIXAL3D":
+        # Another Python of the same version can leave packages in the shared user site.
+        env["PYTHONNOUSERSITE"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        env.pop("PYTHONPATH", None)
+        env.pop("PYTHONHOME", None)
     _job["stage"] = step["stage"]
     _job["step"] = step["name"]
     _job["log_path"] = str(Path(_job["output_dir"]) /
@@ -289,22 +333,24 @@ def _start(mode, source, ratios, screen_sizes, refine_mode, scale, height=None,
         photo = _absolute(source, "photo")
         if not _exists(photo):
             raise FileNotFoundError(photo)
-        for key in ("triposr_python", "triposr_repo"):
-            if not config.get(key):
-                raise RuntimeError(f"Configure {key} for quick mode")
-        if not Path(config["triposr_repo"]).is_dir():
-            raise FileNotFoundError(config["triposr_repo"])
+        stage, generator_python, generator_repo = _quick_generator(config)
+        config = dict(config, generator_python=str(generator_python))
         original_obj = work / "quick" / "mesh.obj"
         original_texture = work / "quick" / "mesh_texture.png"
         complete = original_obj.with_suffix(".complete.json")
-        args = ["--repo", config["triposr_repo"], "--image", photo,
+        args = ["--repo", generator_repo, "--image", photo,
                 "--output", original_obj, "--up", "z"]
         if height is not None:
             if float(height) <= 0:
                 raise ValueError("Height must be positive")
             args += ["--height", height]
-        _add_step(steps, "TRIPOSR", "triposr",
-                  "quick_generation/triposr_generate.py", args, [complete])
+        if stage == "PIXAL3D":
+            # about as many faces as TripoSR, so simplification and refinement stay quick
+            args += ["--faces", 100000]
+        script = ("quick_generation/comfyui_generate.py" if stage == "PIXAL3D"
+                  else "quick_generation/triposr_generate.py")
+        _add_step(steps, stage, stage.lower(), script, args, [complete])
+        unreal.log(f"Quick mode generator: {stage.lower()}")
         cameras = None
     if mode == "accurate" and _exists(cameras):
         fingerprint = _fingerprint(original_obj, original_texture, cameras)
