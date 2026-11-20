@@ -8240,12 +8240,9 @@ def _export_auto_lod_exmesh_result():
     if iteration is None:
         raise RuntimeError(f"No ExMesh checkpoint found in: {model_path}")
 
+    # Sobel face_importance.npy is only used by the legacy WildMesh path;
+    # PPQ computes its own energy from cameras.json.
     face_importance = model_path / "face_importance.npy"
-    if not face_importance.is_file():
-        raise RuntimeError(
-            "face_importance.npy was not generated. "
-            "The modified D:\\GH\\ExMesh\\train.py must be used."
-        )
 
     export_dir = model_path / "export"
     export_dir.mkdir(parents=True, exist_ok=True)
@@ -8294,7 +8291,6 @@ def _export_auto_lod_exmesh_result():
     unreal.log("Auto LOD: ExMesh export complete")
     unreal.log(f"OBJ: {obj_path}")
     unreal.log(f"Texture: {texture_path}")
-    unreal.log(f"Importance: {face_importance}")
 
 
 
@@ -8435,7 +8431,7 @@ def _start_auto_lod_ppq():
         iteration=int(state["iteration"]),
         ratios=(ratio,),
         screen_sizes=(1.0, screen_size),
-        refine_mode="full",
+        refine_mode=state.get("refine_mode", "full"),
         scale=100.0,
         ue_transform=ue_transform,
     )
@@ -8680,11 +8676,17 @@ def _auto_lod_tick(delta_seconds):
 def start_auto_lod_pipeline(
     iterations=10000,
     ratio=0.1,
-    importance_lambda=4.0,
+    importance_lambda=None,
     lod1_screen_size=0.35,
     dataset_path=None,
-    height_cm=100.0
+    height_cm=100.0,
+    refine_mode="full"
 ):
+    """ExMesh training -> export -> PPQ LOD (reconstruction_lod_v2).
+
+    importance_lambda is ignored (Sobel WildMesh is obsolete); it is kept so
+    older widget calls that still pass it keep working.
+    """
     global _auto_lod_pipeline
     global _auto_lod_tick_handle
     global _auto_lod_last_poll_time
@@ -8694,8 +8696,8 @@ def start_auto_lod_pipeline(
     _proceed, dataset_path = reconstruction_prepare.resolve_or_prepare(
         dataset_path,
         lambda prepared: start_auto_lod_pipeline(
-            iterations, ratio, importance_lambda, lod1_screen_size, prepared,
-            height_cm=height_cm
+            iterations, ratio, None, lod1_screen_size, prepared,
+            height_cm=height_cm, refine_mode=refine_mode
         ),
     )
     if not _proceed:
@@ -8712,7 +8714,6 @@ def start_auto_lod_pipeline(
     try:
         iterations = int(float(_widget_number(iterations)))
         ratio = float(_widget_number(ratio))
-        importance_lambda = float(_widget_number(importance_lambda))
         lod1_screen_size = float(_widget_number(lod1_screen_size))
         height_cm = float(_widget_number(height_cm))
     except (TypeError, ValueError):
@@ -8725,8 +8726,9 @@ def start_auto_lod_pipeline(
     if not 0.0 < ratio < 1.0:
         unreal.log_error("Ratio must be between 0 and 1.")
         return
-    if importance_lambda < 0.0:
-        unreal.log_error("Importance lambda must be zero or greater.")
+    refine_mode = str(refine_mode).strip().lower() or "full"
+    if refine_mode not in ("full", "tex", "off"):
+        unreal.log_error("Refine mode must be full, tex or off.")
         return
     if height_cm <= 0.0:
         unreal.log_error("Height (cm) must be greater than 0.")
@@ -8738,9 +8740,9 @@ def start_auto_lod_pipeline(
     required_files = [
         MODIFIED_TRAIN_SCRIPT,
         MODIFIED_EXPORT_SCRIPT,
-        MODIFIED_EXMESH_REPO
-        / "simplification"
-        / "wild_simplify_xatlas_modified.py"
+        MODIFIED_EXMESH_REPO / "simplification" / "photometric_quadric_weights.py",
+        MODIFIED_EXMESH_REPO / "simplification" / "wild_simplify_xatlas_verified.py",
+        MODIFIED_EXMESH_REPO / "simplification" / "appearance_refine.py",
     ]
     missing_files = [path for path in required_files if not path.is_file()]
     if missing_files:
@@ -8789,7 +8791,7 @@ def start_auto_lod_pipeline(
         "pid": process.pid,
         "iterations": iterations,
         "ratio": ratio,
-        "importance_lambda": importance_lambda,
+        "refine_mode": refine_mode,
         "lod1_screen_size": lod1_screen_size,
         "height_cm": height_cm,
         "dataset": selected_dataset,
@@ -8810,7 +8812,7 @@ def start_auto_lod_pipeline(
     unreal.log("Auto LOD pipeline started")
     unreal.log(f"Iterations: {iterations}")
     unreal.log(f"Ratio: {ratio}")
-    unreal.log(f"Importance lambda: {importance_lambda}")
+    unreal.log(f"LOD1 screen size: {lod1_screen_size}, refine: {refine_mode}")
     unreal.log(f"Process ID: {process.pid}")
     unreal.log(f"Output: {output_dir}")
     unreal.log(f"Log: {training_log}")
@@ -8839,6 +8841,11 @@ def get_auto_lod_pipeline_status():
         unreal.log(f"Asset: {state['asset_path']}")
     if state.get("error"):
         unreal.log_error(f"Error: {state['error']}")
+    if state.get("stage") == "PPQ_V2":
+        import reconstruction_lod_v2 as v2
+        v2_state = v2.get_lod_v2_status(show_dialog=True)
+        unreal.log(f"PPQ LOD stage: {v2_state.get('stage')}")
+        state["ppq"] = v2_state
     return state
 
 
