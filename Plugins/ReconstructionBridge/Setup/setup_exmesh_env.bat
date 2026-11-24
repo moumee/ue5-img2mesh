@@ -153,6 +153,8 @@ if defined FROM_SOURCE (
     echo [ERROR] ExMesh CUDA extensions failed to import.
     exit /b 1
 )
+rem Numba (requirements.txt) only speeds up LOD simplification, so a failed import is not an error.
+%RUN% python -c "import numba; print('exmesh: numba', numba.__version__)" || echo [WARN] numba failed to import. LOD simplification still works, but slower.
 exit /b 0
 :exmesh_fail
 popd

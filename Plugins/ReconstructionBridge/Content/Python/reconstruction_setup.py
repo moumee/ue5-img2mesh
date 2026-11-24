@@ -22,6 +22,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 SETUP_BAT = PLUGIN_ROOT / "Setup" / "setup_exmesh_env.bat"
 EXMESH_ROOT = PLUGIN_ROOT / "ThirdParty" / "ExMesh"
 PIXAL3D_ITEM = 'Pixal3D quick generation (ComfyUI, "comfyui" conda env)'
+NUMBA_ITEM = 'Numba in the "exmesh" conda env (faster LOD simplification)'
 MINICONDA_URL = "https://docs.conda.io/en/latest/miniconda.html"
 TITLE = "Reconstruction Bridge Setup"
 
@@ -65,6 +66,8 @@ def missing_components():
         missing.append("ExMesh source (git submodule)")
     if not exmesh_python.is_file():
         missing.append('ExMesh training env ("exmesh" conda env)')
+    elif not _has_package(exmesh_python, "numba"):
+        missing.append(NUMBA_ITEM)
     if not reconstruction_prepare.prep_python().is_file():
         missing.append('Preprocessing env ("rb_prep" conda env)')
     if reconstruction_prepare.colmap_executable() is None:
@@ -72,6 +75,11 @@ def missing_components():
     if not pixal3d_ready():
         missing.append(PIXAL3D_ITEM)
     return missing
+
+
+def _has_package(python, package):
+    """True when the conda env of this python.exe has the package (no subprocess)."""
+    return (Path(python).parent / "Lib" / "site-packages" / package / "__init__.py").is_file()
 
 
 def pixal3d_ready():
@@ -89,8 +97,12 @@ def pixal3d_ready():
 
 
 def setup_target(missing):
-    """Only Pixal3D missing: install just that; otherwise run the full setup."""
-    return "pixal3d" if missing == [PIXAL3D_ITEM] else "all"
+    """Only Pixal3D or only Numba missing: install just that; otherwise run the full setup."""
+    if missing == [PIXAL3D_ITEM]:
+        return "pixal3d"
+    if missing == [NUMBA_ITEM]:
+        return "exmesh"
+    return "all"
 
 
 def _ask_install_miniconda():
@@ -130,6 +142,9 @@ def run_setup():
     if target == "pixal3d":
         size = ("Setup opens a console window and downloads about 13 GB "
                 "(PyTorch, ComfyUI, Pixal3D models). It takes 10-30 minutes.\n")
+    elif target == "exmesh":
+        size = ("Setup opens a console window and installs the missing Python packages "
+                'into the "exmesh" conda env. It takes a few minutes.\n')
     else:
         size = ("Setup opens a console window and downloads about 20-25 GB "
                 "(PyTorch x3, COLMAP, Pixal3D models). It takes 20-60 minutes.\n")
@@ -178,7 +193,7 @@ def _prompt_now():
         return
     answer = unreal.EditorDialog.show_message(
         TITLE,
-        "Reconstruction Bridge is not set up on this PC yet.\n\nMissing:\n  - "
+        "Reconstruction Bridge setup is not complete on this PC.\n\nMissing:\n  - "
         + "\n  - ".join(missing)
         + "\n\nSet it up now?\n\n"
         "Yes: start setup   No: don't ask again   Cancel: ask next time\n"
